@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db, auth } from "../firebase/config";
 import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
@@ -10,8 +10,8 @@ function PropertyDetails() {
   const navigate = useNavigate();
   const [property, setProperty] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
-  const [clientName, setClientName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [clients, setClients] = useState<any[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState("");
   const [dateTime, setDateTime] = useState("");
 
   useEffect(() => {
@@ -27,19 +27,33 @@ function PropertyDetails() {
     fetchData();
   }, [id]);
 
+  useEffect(() => {
+    const fetchClients = async () => {
+      if (!auth.currentUser) return;
+      const q = query(collection(db, "clients"), where("userId", "==", auth.currentUser.uid));
+      const snapshot = await getDocs(q);
+      const result = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setClients(result);
+    };
+    fetchClients();
+  }, []);
+
   const handleSchedule = async () => {
-    if (!auth.currentUser || !property) return;
+    if (!auth.currentUser || !property || !selectedClientId) return;
+
+    const client = clients.find((c) => c.id === selectedClientId);
+    if (!client) return;
 
     await addVisit({
-      clientName,
-      phone,
+      clientName: client.name,
+      phone: client.phone,
       dateTime,
       propertyId: property.id,
       userId: auth.currentUser.uid,
+      clientId: selectedClientId
     });
 
-    setClientName("");
-    setPhone("");
+    setSelectedClientId("");
     setDateTime("");
     setShowModal(false);
   };
@@ -122,20 +136,19 @@ function PropertyDetails() {
             <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
               <h2 className="text-xl font-bold mb-4">Nova Visita</h2>
 
-              <input
-                type="text"
-                placeholder="Nome do cliente"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+              <select
+                value={selectedClientId}
+                onChange={(e) => setSelectedClientId(e.target.value)}
                 className="w-full p-2 border rounded mb-3"
-              />
-              <input
-                type="tel"
-                placeholder="Telefone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full p-2 border rounded mb-3"
-              />
+              >
+                <option value="">Selecione um cliente</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name} - {client.phone}
+                  </option>
+                ))}
+              </select>
+
               <input
                 type="datetime-local"
                 value={dateTime}
